@@ -44,6 +44,17 @@ TLE_FLASHMLA_PREFILL_WORKER_NUM_WARPS = 4
     configs=[
         triton.Config({"BK": 64, "BH": 64}, num_warps=8, num_stages=2),
         triton.Config({"BK": 64, "BH": 64}, num_warps=8, num_stages=4),
+        # Smaller head-block (BH) configs for GPUs with limited shared memory
+        # (e.g. MetaX: 64KB/SM). The resident q buffer is BH*DQK*2 bytes
+        # (BH*256*2 *2 + BH*64*2 for DQK=576); BH=64 needs 72KB and fails to
+        # compile with "OutOfResources: shared memory Required 73728 > 65536".
+        # BH=32 halves it to ~36KB, BH=16 to ~18KB. On NVIDIA the autotuner
+        # still picks the faster BH=64 config; on MetaX BH=64 is pruned
+        # (returns inf) and one of these is selected. num_head_blocks scales
+        # automatically so results are numerically identical.
+        triton.Config({"BK": 64, "BH": 32}, num_warps=8, num_stages=2),
+        triton.Config({"BK": 64, "BH": 32}, num_warps=4, num_stages=2),
+        triton.Config({"BK": 64, "BH": 16}, num_warps=4, num_stages=2),
     ],
     key=["SQ", "HQ", "DQK", "SKV", "TOPK", "HAVE_ATTN_SINK", "HAVE_TOPK_LENGTH"],
 )
