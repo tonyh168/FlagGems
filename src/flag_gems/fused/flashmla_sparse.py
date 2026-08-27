@@ -42,19 +42,21 @@ TLE_FLASHMLA_PREFILL_WORKER_NUM_WARPS = 4
 
 @triton.autotune(
     configs=[
-        triton.Config({"BK": 64, "BH": 64}, num_warps=8, num_stages=2),
-        triton.Config({"BK": 64, "BH": 64}, num_warps=8, num_stages=4),
-        # Smaller head-block (BH) configs for GPUs with limited shared memory
-        # (e.g. MetaX: 64KB/SM). The resident q buffer is BH*DQK*2 bytes
-        # (BH*256*2 *2 + BH*64*2 for DQK=576); BH=64 needs 72KB and fails to
-        # compile with "OutOfResources: shared memory Required 73728 > 65536".
-        # BH=32 halves it to ~36KB, BH=16 to ~18KB. On NVIDIA the autotuner
-        # still picks the faster BH=64 config; on MetaX BH=64 is pruned
-        # (returns inf) and one of these is selected. num_head_blocks scales
-        # automatically so results are numerically identical.
-        triton.Config({"BK": 64, "BH": 32}, num_warps=8, num_stages=2),
-        triton.Config({"BK": 64, "BH": 32}, num_warps=4, num_stages=2),
-        triton.Config({"BK": 64, "BH": 16}, num_warps=4, num_stages=2),
+        # MetaX day0: correctness/"just run it" over performance. The dominant
+        # resident shared-memory buffer is the gathered KV tile (kv_blk0[BDP,BK]
+        # + kv_blk1[BDP,BK] + tkv_blk[64,BK] for DQK=576, all bf16, BDP=256
+        # hardcoded). BK=64 -> 256*64*2*2 + 64*64*2 = 73728B = 72KB > MetaX's
+        # 65536B/SM limit -> "OutOfResources: shared memory Required 73728".
+        # BK is the only knob that shrinks the KV tile (BDP fixed, BH does not
+        # affect it). We drop ALL BK=64 configs and force the smallest tile
+        # (BK=16 -> ~18KB, BH=16, num_warps=4, num_stages=1) so the autotuner
+        # has no oversized option left and always compiles under the limit.
+        # Shrinking BK/BH only splits the top-k KV loop (NK = cdiv(topk_len,BK))
+        # and head loop (num_head_blocks = cdiv(HQ,BH)) into more steps, so the
+        # result is numerically identical -- just slower, which is fine here.
+        # NOTE: if MetaX ever raises its shared-memory limit, add back larger
+        # BK configs for speed; on NVIDIA you'd want BK=64 first.
+        triton.Config({"BK": 16, "BH": 16}, num_warps=4, num_stages=1),
     ],
     key=["SQ", "HQ", "DQK", "SKV", "TOPK", "HAVE_ATTN_SINK", "HAVE_TOPK_LENGTH"],
 )
