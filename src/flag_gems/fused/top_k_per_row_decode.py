@@ -857,6 +857,8 @@ def _top_k_per_row_job(
 ):
     NUM_FINAL_ITEMS: tl.constexpr = 2048
 
+    # MetaX day0: tl.assume() unavailable in MetaX Triton. These are compiler
+    # hints for optimization, not correctness requirements — safe to skip.
     assume_aligned = (
         (row_start == 0)
         & (row_end == vocab_size)
@@ -864,12 +866,12 @@ def _top_k_per_row_job(
         & ((vocab_size % BLOCK_SIZE) == 0)
     )
     if assume_aligned:
-        tl.assume(row_start == 0)
-        tl.assume(row_end == vocab_size)
-        tl.assume(stride1 == 1)
+        # tl.assume(row_start == 0)
+        # tl.assume(row_end == vocab_size)
+        # tl.assume(stride1 == 1)
         vocab_size = tl.multiple_of(vocab_size, BLOCK_SIZE)
-    elif stride1 == 1:
-        tl.assume(stride1 == 1)
+    # elif stride1 == 1:
+    #     tl.assume(stride1 == 1)
 
     lane = tl.arange(0, BLOCK_SIZE)
     row_len = row_end - row_start
