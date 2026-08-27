@@ -208,6 +208,13 @@ def fp8_fp4_paged_mqa_logits(
     Returns:
         Logits tensor [total_rows, max_model_len] float32.
     """
+    # MetaX day0: Skip this kernel due to MLIR type error (i8 vs f32 in
+    # packLLEElements at line 109). Falls back to PyTorch portable implementation
+    # in vllm_fl/kernels/glm5_next/indexer_backend.py::_torch_paged_mqa_logits
+    raise NotImplementedError(
+        "fp8_fp4_paged_mqa_logits disabled for MetaX (MLIR type incompatibility)"
+    )
+
     logger.debug("GEMS FP8_FP4_PAGED_MQA_LOGITS")
 
     q_values, q_scale = q
